@@ -1,5 +1,5 @@
 # STM32F4xx Bootloader
-This bootloader is designed for the STM32F401 microcontroller. It provides functionality to perform various operations such as fetching commands from the host, erasing and writing to Flash memory, reading protection levels, and more.
+This bootloader is designed for the STM32F4xx microcontroller. It provides functionality to perform various operations such as fetching commands from the host, erasing and writing to Flash memory, reading protection levels, and more.
 
 ## Files
 
