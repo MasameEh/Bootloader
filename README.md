@@ -37,13 +37,4 @@ Several macros are defined in `bootloader.h`:
 11. **Bootloader_Read_OTP**: Reads data from OTP memory.
 12. **Bootloader_Change_Read_Protection_Level**: Changes the read protection level.
 
-## How to Use
-
-- Include `bootloader.h` in your project.
-- Utilize the functions provided in the bootloader to perform Flash-related operations on the STM32F401 microcontroller.
-
-This README provides an overview of the bootloader, its functionalities, and the available functions that can be used in the application.
-
-For more details and usage, refer to the comments within the `bootloader.h` file and its corresponding implementation file.
-
 *Note: The README provides an overview and structure of the bootloader. Additional documentation and comments within the code may contain more detailed information.*
