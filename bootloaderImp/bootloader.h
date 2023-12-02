@@ -17,7 +17,7 @@
 
 /* ------------------ Macro Declarations --------------------------- */			 				
 #define BL_DEBUG_UART					   				 (&huart1)
-#define BL_HOST_COMMUNICATION_UART		   (&huart1)
+#define BL_HOST_COMMUNICATION_UART		   (&huart2)
 
 #define CRC_ENGINE											 (&hcrc)
 
