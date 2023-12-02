@@ -20,6 +20,7 @@ static void Bootloader_Get_Sector_Protection_Status(uint8_t *Host_Buffer);
 static void Bootloader_Read_OTP(uint8_t *Host_Buffer);
 static void Bootloader_Change_Read_Protection_Level(uint8_t *Host_Buffer);
 
+/*	Helper functions	*/
 static uint8_t Bootloader_CRC_Verify(uint8_t *pData, uint32_t Data_Len, uint32_t Host_CRC);
 static void Bootloader_Send_ACK(uint8_t Replay_Len);
 static void Bootloader_Send_NACK(void);
@@ -27,7 +28,8 @@ static void Bootloader_Send_Data_To_Host(uint8_t *Host_Buffer, uint32_t Data_Len
 static uint8_t Host_Address_Verification(uint32_t Jump_Address);
 static uint8_t Perform_Flash_Erase(uint8_t Sector_Numebr, uint8_t Number_Of_Sectors);
 static uint8_t Flash_Memory_Write_Payload(uint8_t *Host_Payload, uint32_t Start_Addr, uint8_t Payload_Len);
-
+static uint8_t BL_Get_RDP_Level(uint8_t *RDP_Level);
+static uint8_t BL_Change_RDP_Level(uint8_t RDP_Level);
 /* ----------------- Global Variables Definitions ----------------- */
 static uint8_t BL_Host_Buffer[BL_HOST_BUFFER_RX_SIZE];
 
@@ -86,23 +88,19 @@ BL_Status BL_UART_Fetch_Host_Command(void)
 			switch(BL_Host_Buffer[1])
 			{
 				case CBL_GET_VER_CMD:
-					BL_Print_Message("CBL_GET_VER_CMD \r\n");
 					Bootloader_Get_Version(BL_Host_Buffer);
 					status = BL_OK;
 					break;
 				case CBL_GET_HELP_CMD:
 					Bootloader_Get_Help(BL_Host_Buffer);
-				  BL_Print_Message("CBL_GET_HELP_CMD \r\n");
 					status = BL_OK;
 					break;
 				case CBL_GET_CID_CMD:
 					Bootloader_Get_Chip_Identification_Number(BL_Host_Buffer);
-					BL_Print_Message("CBL_GET_CID_CMD \r\n");
 					status = BL_OK;
 					break;
 				case CBL_GET_RDP_STATUS_CMD:
-					Bootloader_Read_Protection_Level(BL_Host_Buffer);
-					BL_Print_Message("CBL_GET_RDP_STATUS_CMD \r\n");
+					Bootloader_Read_Protection_Level(BL_Host_Buffer);	
 					status = BL_OK;
 					break;
 				case CBL_GO_TO_ADDR_CMD:
@@ -281,8 +279,127 @@ static void Bootloader_Get_Chip_Identification_Number(uint8_t *Host_Buffer)
 
 static void Bootloader_Read_Protection_Level(uint8_t *Host_Buffer)
 {
+	uint8_t Host_CMD_Length = 0;
+	uint32_t CRC32 = 0;
+	uint8_t RDP_Level = 0;
+	uint8_t Get_RDP_Status = CBL_GET_RDP_FAILED;
+	
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("Read the Flash memory protection level \r\n");
+#endif
+	// Extract the CRC sent by the Host
+	Host_CMD_Length = Host_Buffer[0] + 1;
+	CRC32 = *((uint32_t *)((Host_Buffer + Host_CMD_Length) - CRC_SIZE_BYTE));
+	
+	// CRC Verification
+	if(CRC_VERIFICATION_PASSED == Bootloader_CRC_Verify((uint8_t *)&Host_Buffer[0], Host_CMD_Length - CRC_SIZE_BYTE, CRC32))
+	{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("CRC VERIFICATION PASSED\r\n");
+#endif
+			Bootloader_Send_ACK(1);
+			/* Read the protection level */
+			Get_RDP_Status = BL_Get_RDP_Level(&RDP_Level);
+			if(CBL_GET_RDP_FAILED == Get_RDP_Status)
+			{
+				// Indcaites the failure
+				RDP_Level = 0xFF;
+				// Report the Reading of protection level failed
+				Bootloader_Send_Data_To_Host((uint8_t *)&RDP_Level, 1);
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+				BL_Print_Message("Protection Level is 0x%X\r\n", RDP_Level);
+#endif
+			}
+			else
+			{
+				// Report the Reading of protection level successed
+				Bootloader_Send_Data_To_Host((uint8_t *)&RDP_Level, 1);
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+				BL_Print_Message("Protection Level is 0x%X\r\n", RDP_Level);
+#endif
+			}
+	}
+	else
+	{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("CRC VERIFICATION FAILED\r\n");
+#endif
+			Bootloader_Send_NACK();
+	}
+}
 
-
+static void Bootloader_Change_Read_Protection_Level(uint8_t *Host_Buffer)
+{
+	uint8_t Host_CMD_Length = 0;
+	uint32_t CRC32 = 0;
+	uint8_t Host_RDP_Level = 0;
+	uint8_t Change_RDP_Status = CBL_CHANGE_RDP_FAILED;
+	
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("Change the Flash memory protection level \r\n");
+#endif
+	// Extract the CRC sent by the Host
+	Host_CMD_Length = Host_Buffer[0] + 1;
+	CRC32 = *((uint32_t *)((Host_Buffer + Host_CMD_Length) - CRC_SIZE_BYTE));
+	
+	// CRC Verification
+	if(CRC_VERIFICATION_PASSED == Bootloader_CRC_Verify((uint8_t *)&Host_Buffer[0], Host_CMD_Length - CRC_SIZE_BYTE, CRC32))
+	{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("CRC VERIFICATION PASSED\r\n");
+#endif
+			Bootloader_Send_ACK(1);
+			/* Extract the desired protection level*/
+			Host_RDP_Level = Host_Buffer[2];
+			if(0x02 == Host_RDP_Level)
+			{
+					// Report the Change of protection level failed
+					Bootloader_Send_Data_To_Host((uint8_t *)&Change_RDP_Status, 1);
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+					BL_Print_Message("the Change of protection level to level 2 failed \r\n");
+#endif
+			}
+			else if(0x01 == Host_RDP_Level || 0x00 == Host_RDP_Level)
+			{
+				if(0x01 == Host_RDP_Level)
+				{
+					Host_RDP_Level = 0x55;
+				}
+				else
+				{
+					Host_RDP_Level = 0xAA;
+				}
+				/* Change the protection level */
+				Change_RDP_Status = BL_Change_RDP_Level(Host_RDP_Level);
+		
+				if(CBL_CHANGE_RDP_FAILED == Change_RDP_Status)
+				{
+					// Report the Change of protection level failed
+					Bootloader_Send_Data_To_Host((uint8_t *)&Change_RDP_Status, 1);
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+					BL_Print_Message("the Change of protection level failed \r\n");
+#endif
+				}
+				else
+				{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+					BL_Print_Message("Read protection changed to 0x%X \r\n", Host_RDP_Level);
+#endif
+					// Report the Change of protection level successed
+					Bootloader_Send_Data_To_Host((uint8_t *)&Change_RDP_Status, 1);
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+					BL_Print_Message("the Change of protection level successed \r\n");
+#endif
+				}
+			}else{/* Nothing */}
+	}
+	else
+	{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("CRC VERIFICATION FAILED\r\n");
+#endif
+			Bootloader_Send_NACK();
+	}
 }
 
 static void Bootloader_Jump_To_Address(uint8_t *Host_Buffer)
@@ -484,10 +601,9 @@ static void Bootloader_Read_OTP(uint8_t *Host_Buffer)
 
 }
 
-static void Bootloader_Change_Read_Protection_Level(uint8_t *Host_Buffer)
-{
 
-}
+
+/*************************** Helper Functions	************************/
 
 static uint8_t Bootloader_CRC_Verify(uint8_t *pData, uint32_t Data_Len, uint32_t Host_CRC)
 {
@@ -505,7 +621,7 @@ static uint8_t Bootloader_CRC_Verify(uint8_t *pData, uint32_t Data_Len, uint32_t
 	
 	// Resets the CRC calculation unit 
 	__HAL_CRC_DR_RESET(CRC_ENGINE);
-	BL_Print_Message("0x%x \r\n", CRC_Calculated);
+	BL_Print_Message("Calculated CRC is 0x%x \r\n", CRC_Calculated);
 	// Compare between the received CRC value and the calculated
 	if(CRC_Calculated == Host_CRC)
 	{
@@ -524,9 +640,6 @@ static void Bootloader_Send_ACK(uint8_t Replay_Len)
 	ACK_Value[0] = CBL_SEND_ACK;
 	ACK_Value[1] = Replay_Len;
 	HAL_UART_Transmit(BL_HOST_COMMUNICATION_UART, ACK_Value, 2, HAL_MAX_DELAY);	
-#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
-			BL_Print_Message("Bootloader sends ACK\r\n");
-#endif
 }
 
 static void Bootloader_Send_NACK(void)
@@ -538,9 +651,6 @@ static void Bootloader_Send_NACK(void)
 static void Bootloader_Send_Data_To_Host(uint8_t *Host_Buffer, uint32_t Data_Len)
 {
 	HAL_UART_Transmit(BL_HOST_COMMUNICATION_UART, Host_Buffer, Data_Len, HAL_MAX_DELAY);
-#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
-			BL_Print_Message("Bootloader sends INFO\r\n");
-#endif
 }
 
 static uint8_t Host_Address_Verification(uint32_t Jump_Address)
@@ -684,4 +794,56 @@ static uint8_t Flash_Memory_Write_Payload(uint8_t *Host_Payload, uint32_t Start_
 		}
 	}
 	return Write_Status;
+}
+
+static uint8_t BL_Get_RDP_Level(uint8_t *RDP_Level)
+{
+	FLASH_OBProgramInitTypeDef FLASH_OBP;
+	uint8_t RDP_Get_Status = CBL_GET_RDP_FAILED;
+	// Get the Option byte configuration
+	HAL_FLASHEx_OBGetConfig(&FLASH_OBP);
+
+	*RDP_Level = (uint8_t)(FLASH_OBP.RDPLevel);
+	RDP_Get_Status = CBL_GET_RDP_PASSED;
+
+	return RDP_Get_Status;
+}
+
+static uint8_t BL_Change_RDP_Level(uint8_t RDP_Level)
+{
+	FLASH_OBProgramInitTypeDef FLASH_OBP;
+	uint8_t RDP_Change_Status = CBL_CHANGE_RDP_FAILED;
+  HAL_StatusTypeDef status = HAL_ERROR;
+	
+	// Unlock option bytes control register
+	status &= HAL_FLASH_OB_Unlock();
+	
+	if(HAL_OK != status)
+	{
+		RDP_Change_Status = CBL_CHANGE_RDP_FAILED;
+	}
+	else
+	{
+		//* RDP option byte configuration */
+		FLASH_OBP.OptionType = OPTIONBYTE_RDP;
+		// Assign the protection level 
+		FLASH_OBP.RDPLevel = (uint32_t)RDP_Level;
+		// Change the Option byte configuration
+		status &= HAL_FLASHEx_OBProgram(&FLASH_OBP);
+		if(HAL_OK != status)
+		{
+			RDP_Change_Status = CBL_CHANGE_RDP_FAILED;
+		}
+		else
+		{
+			// Launch the option bytes loading
+			status &= HAL_FLASH_OB_Launch();
+			
+			RDP_Change_Status = CBL_CHANGE_RDP_PASSED;
+		}
+
+		// Lock option bytes control register
+		status &= HAL_FLASH_OB_Lock();	
+	}
+	return RDP_Change_Status;
 }

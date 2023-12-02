@@ -91,6 +91,13 @@
 #define FLASH_MEMORY_WRITE_FAILED			0x00
 #define FLASH_MEMORY_WRITE_PASSED			0x01	
 
+/* CBL_GET_RDP_STATUS_CMD */
+#define CBL_GET_RDP_FAILED						0x00	
+#define CBL_GET_RDP_PASSED						0x01
+
+/* CBL_CHANGE_ROP_Level_CMD */
+#define CBL_CHANGE_RDP_FAILED						0x00	
+#define CBL_CHANGE_RDP_PASSED						0x01
 /* ------------------ Macro Functions Declarations ----------------- */
 
 
