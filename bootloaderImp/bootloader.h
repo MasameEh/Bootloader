@@ -16,7 +16,7 @@
 #include "crc.h"
 
 /* ------------------ Macro Declarations --------------------------- */			 				
-#define BL_DEBUG_UART								     (&huart1)
+#define BL_DEBUG_UART					   				 (&huart1)
 #define BL_HOST_COMMUNICATION_UART		   (&huart1)
 
 #define CRC_ENGINE											 (&hcrc)
@@ -65,7 +65,7 @@
 
 #define ADDRESS_IS_INVALID						0x00
 #define ADDRESS_IS_VALID							0x01
-
+/*  CBL_FLASH_ERASE_CMD  */
 #define ERASE_FAILED									0x00
 #define ERASE_SUCCEEDED							  0x01
 #define INVALID_SECTOR_NUMBER					0x02
@@ -86,6 +86,10 @@
 #define STM32F401xx_SRAM_END					(STM32F401xx_SRAM_SIZE + SRAM1_BASE)
 
 #define HAL_SUCCESSFUL_ERASE					0xFFFFFFFFU
+
+/* CBL_MEM_WRITE_CMD */
+#define FLASH_MEMORY_WRITE_FAILED			0x00
+#define FLASH_MEMORY_WRITE_PASSED			0x01	
 
 /* ------------------ Macro Functions Declarations ----------------- */
 

@@ -26,6 +26,7 @@ static void Bootloader_Send_NACK(void);
 static void Bootloader_Send_Data_To_Host(uint8_t *Host_Buffer, uint32_t Data_Len);
 static uint8_t Host_Address_Verification(uint32_t Jump_Address);
 static uint8_t Perform_Flash_Erase(uint8_t Sector_Numebr, uint8_t Number_Of_Sectors);
+static uint8_t Flash_Memory_Write_Payload(uint8_t *Host_Payload, uint32_t Start_Addr, uint8_t Payload_Len);
 
 /* ----------------- Global Variables Definitions ----------------- */
 static uint8_t BL_Host_Buffer[BL_HOST_BUFFER_RX_SIZE];
@@ -394,7 +395,68 @@ static void Bootloader_Erase_Flash(uint8_t *Host_Buffer)
 
 static void Bootloader_Memory_Write(uint8_t *Host_Buffer)
 {
-
+	uint8_t Host_CMD_Length = 0;
+	uint32_t CRC32 = 0;
+	uint8_t Payload_Len = 0;
+	uint32_t Host_Addr = 0;
+	uint8_t Addr_Verifictaion = ADDRESS_IS_INVALID;
+	uint8_t Write_Status = FLASH_MEMORY_WRITE_FAILED;
+	
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("Write in Flash Memory\r\n");
+#endif
+	// Extract the CRC sent by the Host
+	Host_CMD_Length = Host_Buffer[0] + 1;
+	CRC32 = *((uint32_t *)((Host_Buffer + Host_CMD_Length) - CRC_SIZE_BYTE));
+	
+	// CRC Verification
+	if(CRC_VERIFICATION_PASSED == Bootloader_CRC_Verify((uint8_t *)&Host_Buffer[0], Host_CMD_Length - CRC_SIZE_BYTE, CRC32))
+	{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+		BL_Print_Message("CRC VERIFICATION PASSED\r\n");
+#endif
+		Bootloader_Send_ACK(1);
+		// Extract the start address
+		Host_Addr = *((uint32_t *)&Host_Buffer[2]);
+		// Extract the payload length
+		Payload_Len = Host_Buffer[6];
+		// Host start address Verification
+		Addr_Verifictaion = Host_Address_Verification(Host_Addr);
+		if(ADDRESS_IS_VALID == Addr_Verifictaion)
+		{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("Host Start Address is Valid \r\n");
+#endif
+			// Write data in the Flash
+			Write_Status = Flash_Memory_Write_Payload((uint8_t *)&Host_Buffer[7], Host_Addr, Payload_Len);
+			
+			if(FLASH_MEMORY_WRITE_PASSED == Write_Status)
+			{
+				// Report writing passed
+				Bootloader_Send_Data_To_Host(&Write_Status, 1);
+			}
+			else
+			{
+				// Report writing failed
+				Bootloader_Send_Data_To_Host(&Write_Status, 1);
+			}
+		}
+		else
+		{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+			BL_Print_Message("Host Start Address is Invalid\r\n");
+#endif	
+			// Report Address is invalid
+			Bootloader_Send_Data_To_Host(&Addr_Verifictaion, 1);
+		}
+	}
+	else
+	{
+#if BL_DEBUG_INFO_CONTROLL == DEBUG_INFO_ENABLE
+		BL_Print_Message("CRC VERIFICATION FAILED\r\n");
+#endif
+		Bootloader_Send_NACK();
+	}
 
 }
 
@@ -582,4 +644,44 @@ static uint8_t Perform_Flash_Erase(uint8_t Sector_Numebr, uint8_t Number_Of_Sect
 		}
 	}
 	return Sector_Validity;
+}
+
+static uint8_t Flash_Memory_Write_Payload(uint8_t *Host_Payload, uint32_t Start_Addr, uint8_t Payload_Len)
+{
+	HAL_StatusTypeDef HAL_Status = HAL_ERROR;
+	uint8_t Payload_Counter = 0;
+	uint8_t Write_Status = FLASH_MEMORY_WRITE_FAILED;
+	// Unlock the flash memory
+	HAL_Status = HAL_FLASH_Unlock();
+	if(HAL_Status != HAL_OK)
+	{
+		Write_Status = FLASH_MEMORY_WRITE_FAILED;
+	}
+	else
+	{
+		for(Payload_Counter = 0; Payload_Counter < Payload_Len; Payload_Counter++)
+		{
+			HAL_Status = HAL_FLASH_Program(FLASH_TYPEPROGRAM_BYTE, (Start_Addr + Payload_Counter), Host_Payload[Payload_Counter]);
+			if(HAL_Status != HAL_OK)
+			{
+				Write_Status = FLASH_MEMORY_WRITE_FAILED;
+				break;
+			}
+			else
+			{
+				Write_Status = FLASH_MEMORY_WRITE_PASSED;
+			}
+		}
+		// Lock the flash memory
+		HAL_Status = HAL_FLASH_Lock();
+		if(HAL_Status != HAL_OK)
+		{
+		Write_Status = FLASH_MEMORY_WRITE_FAILED;
+		}
+		else
+		{
+			Write_Status = FLASH_MEMORY_WRITE_PASSED;
+		}
+	}
+	return Write_Status;
 }
